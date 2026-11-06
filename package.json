@@ -1,0 +1,39 @@
+{
+  "name": "shinten",
+  "version": "0.1.0",
+  "description": "User input sealed in the browser to the key of whoever will act on it, stored unopened on every server, opened only where the work is done.",
+  "license": "Apache-2.0",
+  "repository": "github:joeartsea/shinten",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./dist/src/index.js",
+    "./form": "./dist/src/form.js"
+  },
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "shinten": "dist/src/cli.js",
+    "shinten-mcp": "dist/src/mcp.js"
+  },
+  "files": [
+    "dist/src",
+    "dist/shinten.browser.js"
+  ],
+  "scripts": {
+    "build": "tsc && esbuild src/form.ts --bundle --format=iife --global-name=shinten --target=es2022 --outfile=dist/shinten.browser.js --log-level=warning",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "prepublishOnly": "npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "jose": "^6.2.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.9.0"
+  }
+}
