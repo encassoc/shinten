@@ -27,3 +27,13 @@ test('keygen, seal, inspect and open compose on the command line', async () => {
   assert.deepEqual(opened.fields, { name: 'A', address: 'B', postalCode: '100-0001' });
   assert.match((await cli('profiles')).stdout, /shipping[\s\S]*inquiry/);
 });
+
+test('the CLI runs through a symlink, as npm installs a bin', async () => {
+  const { symlink } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'shinten-bin-'));
+  const link = join(dir, 'shinten');
+  await symlink(resolve('dist/src/cli.js'), link);
+  const { stdout } = await run(process.execPath, [link, 'profiles']);
+  assert.match(stdout, /shipping/);
+});

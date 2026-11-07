@@ -5,6 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { readFile } from 'node:fs/promises';
+import { isMain } from './main.js';
 import type { JWK } from 'jose';
 import { z } from 'zod';
 import { open, profileOf, recipientsOf, seal, type Sealed } from './envelope.js';
@@ -86,7 +87,7 @@ export function openerServer(keyPath: string | undefined): McpServer {
   return server;
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isMain(import.meta.url)) {
   openerServer(process.env.SHINTEN_KEY)
     .connect(new StdioServerTransport())
     .catch((e: Error) => {

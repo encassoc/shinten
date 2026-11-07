@@ -11,6 +11,7 @@
 // prints: {"clear": {...}, "envelope": {...}}. Documents are read from a
 // file argument or standard input.
 import { readFile } from 'node:fs/promises';
+import { isMain } from './main.js';
 import { parseArgs } from 'node:util';
 import type { JWK } from 'jose';
 import { open, profileOf, recipientsOf, seal, type Sealed } from './envelope.js';
@@ -74,7 +75,7 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (e: Error) => {
