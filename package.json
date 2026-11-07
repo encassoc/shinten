@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "build": "tsc && esbuild src/form.ts --bundle --format=iife --global-name=shinten --target=es2022 --outfile=dist/shinten.browser.js --log-level=warning",
+    "prepare": "npm run build",
     "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
     "prepublishOnly": "npm test"
   },
