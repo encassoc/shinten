@@ -3,7 +3,7 @@
   "version": "0.1.1",
   "description": "User input sealed in the browser to the key of whoever will act on it, stored unopened on every server, opened only where the work is done.",
   "license": "Apache-2.0",
-  "repository": "github:encassoc/shinten",
+  "repository": "github:eucassoc/shinten",
   "type": "module",
   "engines": {
     "node": ">=20"
