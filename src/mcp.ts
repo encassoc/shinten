@@ -22,7 +22,7 @@ const sealedSchema = {
 
 /** Builds the server over a private key file. */
 export function openerServer(keyPath: string | undefined, recipientsPath: string | undefined = process.env.SHINTEN_RECIPIENTS): McpServer {
-  const server = new McpServer({ name: 'shinten', version: '0.2.1' });
+  const server = new McpServer({ name: 'shinten', version: '0.2.2' });
   const approved = async (): Promise<JWK[] | undefined> => (recipientsPath ? recipientsFrom(await readFile(recipientsPath, 'utf8')) : undefined);
   const text = (v: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(v, null, 2) }] });
   const key = async (): Promise<JWK> => {
