@@ -59,22 +59,23 @@ opens only beside the clear fields it was sealed with.
 
 ```ts
 import { open } from 'shinten';
-const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk);
+const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk, { recipients: approvedKeys });
 ```
 
 ```sh
 shinten keygen -o desk.json                       # a recipient key, readable by you only (keep it on the device; publish its public half)
-shinten open -k desk.json sealed.json             # {"profile":"shipping","fields":{...}}
+shinten open -k desk.json -r approved.json sealed.json   # {"profile":"shipping","fields":{...}}
+shinten watch -r approved.json https://shop.example/.well-known/shinten.json   # exit 1 if the site serves other keys
 shinten inspect sealed.json                       # profile, clear fields and recipients, without opening
 shinten seal -p inquiry -k keys.json values.json  # seal from the command line
 ```
 
 The MCP server does the same for an agent. The private key is the file
 named by `SHINTEN_KEY`; the server opens envelopes with it and writes the
-plaintext nowhere.
+plaintext nowhere. `SHINTEN_RECIPIENTS` names the approved keys.
 
 ```json
-{ "mcpServers": { "shinten": { "command": "shinten-mcp", "env": { "SHINTEN_KEY": "/path/to/desk.json" } } } }
+{ "mcpServers": { "shinten": { "command": "shinten-mcp", "env": { "SHINTEN_KEY": "/path/to/desk.json", "SHINTEN_RECIPIENTS": "/path/to/approved.json" } } } }
 ```
 
 | Tool | Does |
@@ -90,11 +91,27 @@ A sealed field survives every leak of data at rest: database dumps,
 backups, exports, an old plugin's tables, a compromised SaaS account. Those
 are most breaches.
 
-It does not survive a server that is compromised at the moment of input
-and serves a modified page, which can read the field before it is sealed.
+The site serves the keys its forms seal to, so whoever controls the site
+can replace them, adding a key of their own or swapping one, and forms then
+seal to them too. Shinten makes this show instead of trusting the site:
+
+- Every envelope names, in its authenticated header, the exact keys it was
+  sealed to (RFC 7638 thumbprints; `kid` is only a label and can be copied).
+- The opening side keeps the keys it approved (`approved.json`, a JWK Set)
+  and opens with them: an envelope sealed to any other key, or missing an
+  approved one, is refused with `RecipientError`. A replaced key list is
+  found at the first order sealed with it, even if it was served to only
+  some visitors.
+- `shinten watch` compares the key list the site serves with the approved
+  keys, from outside the site, so a replacement can be found before any
+  order. Run it on a schedule.
+
+It does not survive a site that serves a modified page at the moment of
+input, which can read a field before it is sealed, with no key involved.
 Subresource integrity and a content security policy narrow that window;
-they do not close it. Seal the keys document the same way you would any
-other asset.
+they do not close it. To close it, the form has to come from somewhere the
+site does not control: an iframe on a domain held by the opening side or a
+neutral party, as payment pages do with hosted fields.
 
 A lost private key loses every envelope sealed to it alone. Always seal to
 a second recipient: a backup key kept offline, or a key split among

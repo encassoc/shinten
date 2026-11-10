@@ -4,7 +4,9 @@
 //   shinten keygen [-o desk.json]                  a recipient key pair, as JSON, readable by its owner only
 //   shinten profiles                               the profiles and their clear fields
 //   shinten seal -p PROFILE -k keys.json [values.json]
-//   shinten open -k private.json [sealed.json]
+//   shinten open -k private.json [-r approved.json] [sealed.json]
+//                                                  with -r, refuse envelopes not sealed to exactly the approved keys
+//   shinten watch -r approved.json URL             check that a site serves exactly the approved keys; exit 1 if not
 //
 // `keys.json` is a JWK Set of the recipients' public keys, or one key.
 // `values.json` is {"field": "value", ...}; `sealed.json` is what `seal`
@@ -17,6 +19,7 @@ import type { JWK } from 'jose';
 import { open, profileOf, recipientsOf, seal, type Sealed } from './envelope.js';
 import { generateKey, toPublic } from './keys.js';
 import { profiles } from './profile.js';
+import { recipientsFrom, watchKeys } from './watch.js';
 import { writeSecret } from './secret.js';
 
 async function read(path: string | undefined): Promise<string> {
@@ -26,12 +29,7 @@ async function read(path: string | undefined): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** Recipients from a JWK Set, a list, or a single key; private keys are reduced to their public half. */
-export function recipientsFrom(json: string): JWK[] {
-  const v = JSON.parse(json) as JWK | JWK[] | { keys: JWK[] };
-  const list = Array.isArray(v) ? v : 'keys' in v && Array.isArray(v.keys) ? v.keys : [v as JWK];
-  return list.map(toPublic);
-}
+export { recipientsFrom };
 
 function need(v: string | undefined, flag: string): string {
   if (!v) throw new Error(`${flag} is required`);
@@ -59,11 +57,25 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case 'open': {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { key: { type: 'string', short: 'k' } } });
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: { key: { type: 'string', short: 'k' }, recipients: { type: 'string', short: 'r' } },
+      });
       const key = JSON.parse(await readFile(need(values.key, '--key'), 'utf8')) as JWK;
       const sealed = JSON.parse(await read(positionals[0])) as Sealed;
-      console.log(JSON.stringify(await open(sealed, key)));
+      const recipients = values.recipients ? recipientsFrom(await readFile(values.recipients, 'utf8')) : undefined;
+      console.log(JSON.stringify(await open(sealed, key, recipients ? { recipients } : {})));
       return 0;
+    }
+    case 'watch': {
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { recipients: { type: 'string', short: 'r' } } });
+      const approved = recipientsFrom(await readFile(need(values.recipients, '--recipients'), 'utf8'));
+      const url = need(positionals[0], 'the URL of the key list');
+      const check = await watchKeys(url, approved);
+      console.log(JSON.stringify({ url, ...check }));
+      if (!check.ok) console.error(`${url} does not serve the approved keys: the key list may have been replaced. Stop opening, and check the site.`);
+      return check.ok ? 0 : 1;
     }
     case 'inspect': {
       const { positionals } = parseArgs({ args: rest, allowPositionals: true });
@@ -72,7 +84,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     default:
-      console.error('usage: shinten keygen | profiles | seal | open | inspect');
+      console.error('usage: shinten keygen | profiles | seal | open | inspect | watch');
       return 2;
   }
 }

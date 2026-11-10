@@ -53,21 +53,23 @@ Webフォームに同じことをします。利用者が入力した内容を�
 
 ```ts
 import { open } from 'shinten';
-const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk);
+const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk, { recipients: approvedKeys });
 ```
 
 ```sh
 shinten keygen -o desk.json                       # 宛先の鍵。所有者だけが読める(端末に置き、公開側だけを公開する)
-shinten open -k desk.json sealed.json             # {"profile":"shipping","fields":{...}}
+shinten open -k desk.json -r approved.json sealed.json   # {"profile":"shipping","fields":{...}}
+shinten watch -r approved.json https://shop.example/.well-known/shinten.json   # サイトが承認した鍵以外を配っていたら終了コード1
 shinten inspect sealed.json                       # 開かずに、プロファイルと平文項目と宛先を見る
 shinten seal -p inquiry -k keys.json values.json  # コマンドラインから封じる
 ```
 
 MCPサーバーはエージェント向けに同じことをします。秘密鍵は `SHINTEN_KEY` で
 指すファイルで、サーバーはそれで封筒を開き、平文をどこにも書きません。
+`SHINTEN_RECIPIENTS` で承認した鍵を指します。
 
 ```json
-{ "mcpServers": { "shinten": { "command": "shinten-mcp", "env": { "SHINTEN_KEY": "/path/to/desk.json" } } } }
+{ "mcpServers": { "shinten": { "command": "shinten-mcp", "env": { "SHINTEN_KEY": "/path/to/desk.json", "SHINTEN_RECIPIENTS": "/path/to/approved.json" } } } }
 ```
 
 | ツール | 内容 |
@@ -83,10 +85,24 @@ MCPサーバーはエージェント向けに同じことをします。秘密�
 バックアップ、エクスポート、古いプラグインのテーブル、乗っ取られたSaaSアカウント。
 漏洩の大半はこれです。
 
-入力の瞬間にサーバーが侵害され、改ざんされたページが配られる場合には耐えません。
+フォームが封じる宛先の鍵はサイトが配るので、サイトを握った人は鍵を差し替えられます。
+自分の鍵を足すことも、一つを入れ替えることもでき、以後のフォームはその鍵にも
+封じます。shinten はサイトを信じる代わりに、これが必ず表に出るようにします。
+
+- 封筒は、認証された保護ヘッダーに、封じた鍵そのもの(RFC 7638 の拇印)を記録します。
+  `kid` はただのラベルで、真似できます。
+- 開ける側は承認した鍵(`approved.json`、JWK Set)を持ち、それを渡して開きます。
+  他の鍵にも封じられた封筒や、承認した鍵が欠けた封筒は `RecipientError` で拒否されます。
+  差し替えは、それで封じた最初の注文で見つかります。一部の訪問者にだけ偽の鍵を
+  配っていても同じです。
+- `shinten watch` は、サイトが配る鍵の一覧を、サイトの外から承認した鍵と突き合わせます。
+  注文が来る前に差し替えを見つけられます。定期的に実行してください。
+
+入力の瞬間に改ざんされたページが配られる場合には耐えません。鍵とは関係なく、
 封じる前に読まれるからです。Subresource Integrity と Content Security Policy で
-その窓は狭くなりますが、閉じはしません。鍵の公開文書も、他の資産と同じ扱いで
-守ってください。
+その窓は狭くなりますが、閉じはしません。閉じるには、入力欄をサイトが管理しない
+場所から出す必要があります。開ける側か中立な第三者のドメインの iframe で、
+決済ページのホスト型入力欄と同じ方式です。
 
 秘密鍵を失うと、その鍵だけに封じた封筒はすべて開けなくなります。必ず二つ目の
 宛先にも封じてください。オフラインに置いたバックアップ鍵か、複数人で分割した鍵です。

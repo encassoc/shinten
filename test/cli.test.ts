@@ -55,3 +55,31 @@ test('keygen writes the private key readable by its owner only, redirected or wi
   // -o never overwrites a key.
   await assert.rejects(cli('keygen', '-o', out), /EEXIST|exists/);
 });
+
+test('watch compares the key list a site serves with the approved keys', async () => {
+  const { createServer } = await import('node:http');
+  const dir = await mkdtemp(join(tmpdir(), 'shinten-watch-'));
+  const pub = (k: string) => {
+    const { d: _d, ...p } = JSON.parse(k);
+    return p;
+  };
+  const desk = pub((await cli('keygen')).stdout);
+  const backup = pub((await cli('keygen')).stdout);
+  const thief = pub((await cli('keygen')).stdout);
+  await writeFile(join(dir, 'approved.json'), JSON.stringify({ keys: [desk, backup] }));
+  let served = { keys: [desk, backup] };
+  const server = createServer((_req, res) => res.end(JSON.stringify(served)));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/.well-known/shinten.json`;
+  try {
+    const ok = JSON.parse((await cli('watch', '-r', join(dir, 'approved.json'), url)).stdout);
+    assert.equal(ok.ok, true);
+    served = { keys: [desk, thief] };
+    const bad = await cli('watch', '-r', join(dir, 'approved.json'), url).catch((e: { code: number; stdout: string }) => e);
+    assert.equal((bad as { code: number }).code, 1);
+    const r = JSON.parse((bad as { stdout: string }).stdout);
+    assert.deepEqual([r.ok, r.extra.length, r.missing.length], [false, 1, 1]);
+  } finally {
+    server.close();
+  }
+});

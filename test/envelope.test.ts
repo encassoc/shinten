@@ -10,7 +10,7 @@ test('a shipping address seals to the desk and opens there, postal code in the c
   const s = await seal('shipping', order, [desk.publicJwk]);
   assert.deepEqual(s.clear, { postalCode: '100-0001' });
   assert.deepEqual(recipientsOf(s.envelope), [desk.kid]);
-  assert.deepEqual(profileOf(s.envelope), { profile: 'shipping', clear: ['postalCode'], version: 1 });
+  assert.deepEqual(profileOf(s.envelope), { profile: 'shipping', clear: ['postalCode'], version: 1, keys: [desk.kid] });
   const text = JSON.stringify(s.envelope);
   for (const v of ['山田', '千代田', '090-0000', 'leave at door']) assert.ok(!text.includes(v), `${v} leaked`);
   const o = await open(s, desk.privateJwk);
@@ -83,4 +83,42 @@ test('a field cannot be both clear and sealed: a hand-built envelope that tries 
   // What seal() makes still opens.
   const good = await build(clear, { name: 'A', address: 'Naha' });
   assert.deepEqual((await open({ clear, envelope: good }, desk.privateJwk)).fields, { postalCode: '100-0001', name: 'A', address: 'Naha' });
+});
+
+test('a replaced key list is found at the first envelope: sealed to keys the desk did not approve, it does not open', async () => {
+  const { RecipientError, thumbprint } = await import('../src/envelope.js');
+  const desk = await generateKey();
+  const backup = await generateKey();
+  const approved = [desk.publicJwk, backup.publicJwk];
+  // The site serves the approved keys: it opens, and says which keys it was sealed to.
+  const good = await seal('shipping', order, approved);
+  assert.deepEqual(profileOf(good.envelope).keys, [await thumbprint(desk.publicJwk), await thumbprint(backup.publicJwk)].sort());
+  assert.equal((await open(good, desk.privateJwk, { recipients: approved })).fields.name, order.name);
+
+  // Someone who broke into the site added their key beside the desk's.
+  const thief = await generateKey();
+  const added = await seal('shipping', order, [desk.publicJwk, backup.publicJwk, thief.publicJwk]);
+  await assert.rejects(open(added, desk.privateJwk, { recipients: approved }), (e: Error) => e instanceof RecipientError && /did not approve/.test(e.message) && (e as InstanceType<typeof RecipientError>).extra.length === 1);
+  // Or swapped the backup key for theirs, under the backup key's kid, so that the kids look the same.
+  const disguised = await seal('shipping', order, [desk.publicJwk, { ...thief.publicJwk, kid: backup.kid }]);
+  assert.deepEqual(recipientsOf(disguised.envelope), recipientsOf(good.envelope));
+  await assert.rejects(open(disguised, desk.privateJwk, { recipients: approved }), /did not approve.*not sealed to approved keys/s);
+  // Without approved keys, the desk still opens it: checking needs the approved list.
+  assert.equal((await open(disguised, desk.privateJwk)).fields.name, order.name);
+});
+
+test('envelopes from before declared keys open only when no approved keys are given', async () => {
+  const { GeneralEncrypt, importJWK } = await import('jose');
+  const { bindClear, TYP, VERSION, RecipientError } = await import('../src/envelope.js');
+  const desk = await generateKey();
+  const pub = toPublic(desk.privateJwk);
+  const clear = { postalCode: '100-0001' };
+  const old = await new GeneralEncrypt(new TextEncoder().encode(JSON.stringify({ name: 'A', address: 'B' })))
+    .setProtectedHeader({ enc: 'A256GCM', typ: TYP, cty: 'application/json', shinten: { v: VERSION, profile: 'shipping', clear: ['postalCode'] } })
+    .setAdditionalAuthenticatedData(bindClear(clear))
+    .addRecipient(await importJWK(pub, 'ECDH-ES+A256KW'))
+    .setUnprotectedHeader({ alg: 'ECDH-ES+A256KW', kid: pub.kid as string })
+    .encrypt();
+  assert.equal((await open({ clear, envelope: old }, desk.privateJwk)).fields.name, 'A');
+  await assert.rejects(open({ clear, envelope: old }, desk.privateJwk, { recipients: [desk.publicJwk] }), (e: Error) => e instanceof RecipientError);
 });

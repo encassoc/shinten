@@ -2,6 +2,8 @@
 // shinten-mcp: the opening side as an MCP server, for the agent of whoever
 // does the work. The private key is a file named by SHINTEN_KEY; the
 // server opens envelopes with it and never writes the plaintext anywhere.
+// SHINTEN_RECIPIENTS, if set, names the approved public keys (a JWK Set):
+// envelopes not sealed to exactly those are refused.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { readFile } from 'node:fs/promises';
@@ -11,6 +13,7 @@ import { z } from 'zod';
 import { open, profileOf, recipientsOf, seal, type Sealed } from './envelope.js';
 import { toPublic } from './keys.js';
 import { profiles } from './profile.js';
+import { recipientsFrom } from './watch.js';
 
 const sealedSchema = {
   clear: z.record(z.string(), z.string()).describe('The clear fields stored beside the envelope'),
@@ -18,8 +21,9 @@ const sealedSchema = {
 };
 
 /** Builds the server over a private key file. */
-export function openerServer(keyPath: string | undefined): McpServer {
-  const server = new McpServer({ name: 'shinten', version: '0.1.0' });
+export function openerServer(keyPath: string | undefined, recipientsPath: string | undefined = process.env.SHINTEN_RECIPIENTS): McpServer {
+  const server = new McpServer({ name: 'shinten', version: '0.2.0' });
+  const approved = async (): Promise<JWK[] | undefined> => (recipientsPath ? recipientsFrom(await readFile(recipientsPath, 'utf8')) : undefined);
   const text = (v: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(v, null, 2) }] });
   const key = async (): Promise<JWK> => {
     if (!keyPath) throw new Error('SHINTEN_KEY must name the private key file');
@@ -41,7 +45,7 @@ export function openerServer(keyPath: string | undefined): McpServer {
       title: 'Inspect an envelope',
       description: 'What an envelope is: its profile, its clear fields and the recipients it is sealed to. Opens nothing.',
       inputSchema: sealedSchema,
-      outputSchema: { profile: z.string(), version: z.number(), clear: z.record(z.string(), z.string()), recipients: z.array(z.string()) },
+      outputSchema: { profile: z.string(), version: z.number(), clear: z.record(z.string(), z.string()), recipients: z.array(z.string()), keys: z.array(z.string()).optional() },
     },
     async (sealed) => {
       const s = sealed as unknown as Sealed;
@@ -55,12 +59,13 @@ export function openerServer(keyPath: string | undefined): McpServer {
     {
       title: 'Open an envelope',
       description:
-        'Open an envelope with this device’s private key and return every field as the user typed it. Use it only at the moment the work needs the content, and do not store what comes back.',
+        'Open an envelope with this device’s private key and return every field as the user typed it. Use it only at the moment the work needs the content, and do not store what comes back. When approved keys are configured, an envelope sealed to any other key is refused: the keys published for the form may have been replaced, so stop and tell the person.',
       inputSchema: sealedSchema,
       outputSchema: { profile: z.string(), kid: z.string(), fields: z.record(z.string(), z.string()) },
     },
     async (sealed) => {
-      const out = await open(sealed as unknown as Sealed, await key());
+      const keys = await approved();
+      const out = await open(sealed as unknown as Sealed, await key(), keys ? { recipients: keys } : {});
       return { ...text(out), structuredContent: { ...out } };
     },
   );

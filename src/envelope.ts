@@ -1,4 +1,4 @@
-import { GeneralEncrypt, generalDecrypt, importJWK, type GeneralJWE, type JWK } from 'jose';
+import { GeneralEncrypt, calculateJwkThumbprint, generalDecrypt, importJWK, type GeneralJWE, type JWK } from 'jose';
 import { ALG, ENC, toPublic } from './keys.js';
 import { profile, profiles, split, type Profile } from './profile.js';
 
@@ -58,8 +58,12 @@ export async function seal(profileName: string, values: { [field: string]: strin
   const p = profile(profileName);
   if (recipients.length === 0) throw new Error('at least one recipient is required');
   const { clear, sealed } = split(p, values);
+  // The keys sealed to, by thumbprint, in the protected header: whoever opens
+  // can check them against the keys they approved, so that a key list
+  // replaced on the site is found at the first envelope sealed with it.
+  const keys = (await Promise.all(recipients.map(thumbprint))).sort();
   const e = new GeneralEncrypt(enc.encode(JSON.stringify(sealed)))
-    .setProtectedHeader({ enc: ENC, typ: TYP, cty: 'application/json', shinten: { v: VERSION, profile: p.name, clear: Object.keys(clear).sort() } })
+    .setProtectedHeader({ enc: ENC, typ: TYP, cty: 'application/json', shinten: { v: VERSION, profile: p.name, clear: Object.keys(clear).sort(), keys } })
     .setAdditionalAuthenticatedData(bindClear(clear));
   for (const r of recipients) {
     const pub = toPublic(r);
@@ -69,33 +73,63 @@ export async function seal(profileName: string, values: { [field: string]: strin
   return { clear, envelope: await e.encrypt() };
 }
 
+/** The RFC 7638 thumbprint of a key's public half: what an envelope names its recipients by. */
+export function thumbprint(jwk: JWK): Promise<string> {
+  return calculateJwkThumbprint(toPublic(jwk));
+}
+
+/** An envelope sealed to keys other than the ones approved: the published keys may have been replaced. */
+export class RecipientError extends Error {
+  constructor(
+    message: string,
+    /** Thumbprints sealed to that were not approved. */
+    readonly extra: string[],
+    /** Approved thumbprints the envelope was not sealed to. */
+    readonly missing: string[],
+  ) {
+    super(message);
+    this.name = 'RecipientError';
+  }
+}
+
+export interface OpenOptions {
+  /**
+   * The recipients' public keys as the opening side approved them. The
+   * envelope must be sealed to exactly these, or it is not opened: a key
+   * list replaced on the site, adding a key or swapping one, shows here.
+   */
+  recipients?: JWK[];
+}
+
 /** The recipients an envelope is sealed to, by kid. */
 export function recipientsOf(envelope: Envelope): string[] {
   return envelope.recipients.map((r) => String((r.header as { kid?: string } | undefined)?.kid ?? ''));
 }
 
 /** The profile an envelope was sealed under, read without opening it. */
-export function profileOf(envelope: Envelope): { profile: string; clear: string[]; version: number } {
-  const header = JSON.parse(dec.decode(fromBase64url(envelope.protected ?? ''))) as { typ?: string; shinten?: { v: number; profile: string; clear: string[] } };
+export function profileOf(envelope: Envelope): { profile: string; clear: string[]; version: number; keys?: string[] } {
+  const header = JSON.parse(dec.decode(fromBase64url(envelope.protected ?? ''))) as { typ?: string; shinten?: { v: number; profile: string; clear: string[]; keys?: string[] } };
   if (header.typ !== TYP || !header.shinten) throw new Error('not a shinten envelope');
-  return { profile: header.shinten.profile, clear: header.shinten.clear, version: header.shinten.v };
+  return { profile: header.shinten.profile, clear: header.shinten.clear, version: header.shinten.v, ...(header.shinten.keys ? { keys: header.shinten.keys } : {}) };
 }
 
 /**
  * Opens an envelope with a recipient's private key, checking that the
- * clear fields presented are the ones the envelope was sealed beside.
+ * clear fields presented are the ones the envelope was sealed beside and,
+ * with `opts.recipients`, that it was sealed to exactly the approved keys.
  */
-export async function open(sealed: Sealed, privateJwk: JWK): Promise<Opened> {
+export async function open(sealed: Sealed, privateJwk: JWK, opts: OpenOptions = {}): Promise<Opened> {
   if (!privateJwk.kid) throw new Error('the private key needs a kid');
   const kids = recipientsOf(sealed.envelope);
   if (!kids.includes(privateJwk.kid)) throw new Error(`this envelope is not sealed to ${privateJwk.kid}; recipients: ${kids.join(', ')}`);
   const { plaintext, protectedHeader, additionalAuthenticatedData } = await generalDecrypt(sealed.envelope, await importJWK(privateJwk, ALG));
-  const meta = (protectedHeader as { typ?: string; shinten?: { v: number; profile: string; clear?: string[] } }) ?? {};
+  const meta = (protectedHeader as { typ?: string; shinten?: { v: number; profile: string; clear?: string[]; keys?: unknown } }) ?? {};
   if (meta.typ !== TYP || !meta.shinten) throw new Error('not a shinten envelope');
   if (meta.shinten.v !== VERSION) throw new Error(`envelope version ${meta.shinten.v} is not supported`);
   if (!sameBytes(additionalAuthenticatedData, bindClear(sealed.clear))) {
     throw new Error('the clear fields presented are not the ones this envelope was sealed beside');
   }
+  await checkRecipients(sealed.envelope, meta.shinten.keys, privateJwk, opts.recipients);
   const declared = [...(meta.shinten.clear ?? [])].sort().join('\n');
   if (declared !== Object.keys(sealed.clear).sort().join('\n')) throw new Error('the clear fields presented are not the ones the envelope declares');
   const fields = sealedFields(dec.decode(plaintext));
@@ -110,6 +144,33 @@ export async function open(sealed: Sealed, privateJwk: JWK): Promise<Opened> {
     if (known?.clear.includes(k)) throw new Error(`field ${k} is clear in the ${known.name} profile but was sealed; refusing to open`);
   }
   return { profile: meta.shinten.profile, fields: { ...sealed.clear, ...fields }, kid: privateJwk.kid };
+}
+
+/**
+ * Checks the keys an envelope declares, from its authenticated header,
+ * against its recipients, the key opening it and, if given, the approved
+ * keys. Envelopes sealed before keys were declared open only without
+ * approved keys.
+ */
+async function checkRecipients(envelope: Envelope, declared: unknown, privateJwk: JWK, approved: JWK[] | undefined): Promise<void> {
+  if (declared !== undefined) {
+    if (!Array.isArray(declared) || declared.some((k) => typeof k !== 'string') || declared.length !== envelope.recipients.length) {
+      throw new Error("the envelope's recipients do not match the keys it declares");
+    }
+    if (!declared.includes(await thumbprint(privateJwk))) throw new Error('this key is not among the keys the envelope declares');
+  }
+  if (!approved) return;
+  if (declared === undefined) {
+    throw new RecipientError('the envelope does not say which keys it was sealed to (sealed by shinten before 0.2, or by hand); it cannot be checked against the approved keys', [], []);
+  }
+  const keys = declared as string[];
+  const ok = new Set(await Promise.all(approved.map(thumbprint)));
+  const extra = keys.filter((k) => !ok.has(k));
+  const missing = [...ok].filter((k) => !keys.includes(k));
+  if (extra.length || missing.length) {
+    const parts = [extra.length ? `sealed to keys you did not approve: ${extra.join(', ')}` : '', missing.length ? `not sealed to approved keys: ${missing.join(', ')}` : ''];
+    throw new RecipientError(`${parts.filter(Boolean).join('; ')}. The keys published for the form may have been replaced; stop and check them.`, extra, missing);
+  }
 }
 
 /** The sealed fields: a JSON object of strings, and nothing else. */
