@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // shinten: seal user input to the key of whoever will act on it.
 //
-//   shinten keygen                                 a recipient key pair, as JSON
+//   shinten keygen [-o desk.json]                  a recipient key pair, as JSON, readable by its owner only
 //   shinten profiles                               the profiles and their clear fields
 //   shinten seal -p PROFILE -k keys.json [values.json]
 //   shinten open -k private.json [sealed.json]
@@ -17,6 +17,7 @@ import type { JWK } from 'jose';
 import { open, profileOf, recipientsOf, seal, type Sealed } from './envelope.js';
 import { generateKey, toPublic } from './keys.js';
 import { profiles } from './profile.js';
+import { writeSecret } from './secret.js';
 
 async function read(path: string | undefined): Promise<string> {
   if (path && path !== '-') return readFile(path, 'utf8');
@@ -41,8 +42,9 @@ async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   switch (cmd) {
     case 'keygen': {
+      const { values } = parseArgs({ args: rest, options: { out: { type: 'string', short: 'o' } } });
       const k = await generateKey();
-      console.log(JSON.stringify(k.privateJwk));
+      writeSecret(JSON.stringify(k.privateJwk), values.out);
       return 0;
     }
     case 'profiles': {

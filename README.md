@@ -63,7 +63,7 @@ const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk);
 ```
 
 ```sh
-shinten keygen > desk.json                        # a recipient key (keep it on the device; publish its public half)
+shinten keygen -o desk.json                       # a recipient key, readable by you only (keep it on the device; publish its public half)
 shinten open -k desk.json sealed.json             # {"profile":"shipping","fields":{...}}
 shinten inspect sealed.json                       # profile, clear fields and recipients, without opening
 shinten seal -p inquiry -k keys.json values.json  # seal from the command line

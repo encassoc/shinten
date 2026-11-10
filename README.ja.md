@@ -57,7 +57,7 @@ const { fields } = await open({ clear: { postalCode }, envelope }, privateJwk);
 ```
 
 ```sh
-shinten keygen > desk.json                        # 宛先の鍵(端末に置き、公開側だけを公開する)
+shinten keygen -o desk.json                       # 宛先の鍵。所有者だけが読める(端末に置き、公開側だけを公開する)
 shinten open -k desk.json sealed.json             # {"profile":"shipping","fields":{...}}
 shinten inspect sealed.json                       # 開かずに、プロファイルと平文項目と宛先を見る
 shinten seal -p inquiry -k keys.json values.json  # コマンドラインから封じる

@@ -37,3 +37,21 @@ test('the CLI runs through a symlink, as npm installs a bin', async () => {
   const { stdout } = await run(process.execPath, [link, 'profiles']);
   assert.match(stdout, /shipping/);
 });
+
+test('keygen writes the private key readable by its owner only, redirected or with -o', async () => {
+  const { openSync, closeSync, statSync, readFileSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const dir = await mkdtemp(join(tmpdir(), 'shinten-key-'));
+  // As `shinten keygen > desk.json` would: the shell creates the file for everyone to read.
+  const redirected = join(dir, 'desk.json');
+  const fd = openSync(redirected, 'w', 0o644);
+  spawnSync(process.execPath, ['dist/src/cli.js', 'keygen'], { stdio: ['ignore', fd, 'inherit'] });
+  closeSync(fd);
+  assert.equal(statSync(redirected).mode & 0o777, 0o600);
+  assert.ok(JSON.parse(readFileSync(redirected, 'utf8')).d);
+  const out = join(dir, 'backup.json');
+  await cli('keygen', '-o', out);
+  assert.equal(statSync(out).mode & 0o777, 0o600);
+  // -o never overwrites a key.
+  await assert.rejects(cli('keygen', '-o', out), /EEXIST|exists/);
+});
