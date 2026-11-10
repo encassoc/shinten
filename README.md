@@ -117,6 +117,14 @@ A lost private key loses every envelope sealed to it alone. Always seal to
 a second recipient: a backup key kept offline, or a key split among
 several people.
 
+## Example
+
+[examples/web-shop](examples/web-shop/) is a fictional shop, in Japanese:
+the order form encrypted in the browser, the database as it would leave in
+a breach, the shipping desk that decrypts and deletes, a witnessed trail of
+each step, and a site takeover caught by the desk.
+[A two-minute video](examples/web-shop/demo.mp4) walks through it.
+
 ## Prior art
 
 AWS CloudFront field-level encryption (2017) and US patent 9,058,603

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shinten デモ：暗号化される注文フォーム</title>
+<style>
+:root { --ink:#1d2433; --muted:#5b6475; --line:#e3e7ee; --bg:#f6f7f9; --shop:#b4532f; --shop-soft:#fbf1ec; --ok:#1e7d3a; --ng:#c62828; --warn:#b26a00; --teal:#0e4d4a; }
+* { box-sizing: border-box; }
+body { margin:0; font: 15px/1.7 "Noto Sans JP","Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; color:var(--ink); background:var(--bg); padding-bottom: 96px; }
+.badge { position:fixed; top:10px; right:14px; z-index:50; display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--line); border-radius:999px; padding:4px 12px 4px 10px; box-shadow:0 2px 8px rgba(0,0,0,.06); font-size:11px; color:var(--muted); pointer-events:none; }
+.badge b { color:var(--ink, #1d2433); font-size:12px; }
+.view { display:none; min-height: calc(100vh - 96px); }
+.view.on { display:block; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+/* shop */
+.shop-top { background:#fff; border-bottom:1px solid var(--line); }
+.shop-top .wrap { display:flex; align-items:center; gap:14px; height:64px; }
+.logo-mark { width:34px; height:34px; border-radius:9px; background:var(--shop); color:#fff; display:grid; place-items:center; font-weight:700; }
+.shop-name { font-weight:700; font-size:18px; } .shop-name small { display:block; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:.05em; }
+.shop-nav { background:var(--shop); color:#fff; font-size:13px; } .shop-nav .wrap { display:flex; gap:22px; height:38px; align-items:center; }
+.crumb { font-size:12px; color:var(--muted); margin:14px 0 6px; }
+.card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px 26px; margin:12px 0; }
+h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:0 0 10px; }
+.lead { color:var(--muted); font-size:13px; margin:0 0 14px; }
+.grid2 { display:grid; grid-template-columns: 220px 1fr; gap:10px 16px; align-items:center; }
+label { font-size:13px; font-weight:600; } .req { background:#c62828; color:#fff; font-size:10px; border-radius:3px; padding:0 5px; margin-left:6px; }
+input, select { width:100%; font:inherit; padding:8px 10px; border:1px solid #cdd3dc; border-radius:7px; background:#fff; }
+.product { display:flex; gap:16px; align-items:center; background:var(--shop-soft); border-radius:10px; padding:12px 14px; margin-bottom:16px; }
+.product .ph { width:64px; height:64px; border-radius:8px; background:linear-gradient(135deg,#e9b98f,#b4532f); }
+.btn { display:inline-block; border:0; border-radius:8px; padding:10px 20px; font:inherit; font-weight:700; cursor:pointer; background:var(--shop); color:#fff; }
+.btn.blue { background:#1f5fbf; } .btn.teal { background:var(--teal); } .btn.gray { background:#58606e; } .btn.green { background:var(--ok); }
+.note { font-size:12px; color:var(--muted); }
+.lock { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--teal); background:#e7f3f2; border-radius:999px; padding:2px 10px; }
+/* admin */
+.admin-top { background:#2a3140; color:#fff; } .admin-top .wrap { display:flex; align-items:center; gap:12px; height:56px; font-weight:700; } .admin-top small { font-weight:400; opacity:.75; font-size:12px; }
+table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:600; background:#fafbfc; }
+.cipher { font-family: ui-monospace, Menlo, monospace; font-size:11.5px; color:#6b4fa0; word-break:break-all; }
+pre.dump { background:#11151d; color:#cfe3ff; font-size:11.5px; line-height:1.5; border-radius:10px; padding:16px; max-height: 430px; overflow:hidden; white-space:pre-wrap; word-break:break-all; }
+.alert { border-radius:10px; padding:14px 18px; color:#fff; margin:12px 0; } .alert b { display:block; font-size:16px; } .alert.ok { background:var(--ok); } .alert.ng { background:var(--ng); } .alert.warn { background:var(--warn); } .alert.info { background:#3d4a63; }
+/* desk */
+.desk-top { background:var(--teal); color:#fff; } .desk-top .wrap { display:flex; align-items:center; gap:12px; height:56px; font-weight:700; } .desk-top small { font-weight:400; opacity:.8; font-size:12px; }
+.keys { display:flex; gap:8px; flex-wrap:wrap; } .key { font-size:12px; border:1px solid #bcd9d6; background:#eef7f6; border-radius:999px; padding:2px 10px; }
+.key.bad { border-color:#e7a2a2; background:#fdeeee; color:#a01818; }
+/* trail */
+.trail-top { background:#183a6b; color:#fff; } .trail-top .wrap { display:flex; align-items:center; gap:12px; height:56px; font-weight:700; } .trail-top small { font-weight:400; opacity:.8; font-size:12px; }
+.tl { list-style:none; margin:0; padding:0; } .tl li { display:grid; grid-template-columns: 26px 1fr; gap:10px; padding:10px 0; border-bottom:1px dashed var(--line); }
+.dot { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; font-weight:700; } .dot.ok { background:var(--ok); } .dot.ng { background:var(--ng); } .dot.info { background:#3d6fb6; }
+.tl .t { font-weight:700; } .tl .d { font-size:12px; color:var(--muted); } .mono { font-family: ui-monospace, Menlo, monospace; font-size:11.5px; color:#58606e; }
+/* demo chrome */
+.bar { position:fixed; left:0; right:0; bottom:0; z-index:60; background:#1f2533; color:#cfd6e4; border-top:3px solid #f2c94c; padding:8px 14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px; }
+.bar .tag { background:#f2c94c; color:#1f2533; font-weight:700; border-radius:4px; padding:1px 8px; }
+.bar button { font:inherit; font-size:12px; background:#2f3747; color:#e8ecf3; border:1px solid #485166; border-radius:6px; padding:5px 10px; cursor:pointer; }
+.bar button.hot { border-color:#e05b5b; color:#ffd2d2; }
+.caption { position:fixed; left:50%; bottom:108px; transform:translateX(-50%); z-index:70; background:rgba(22,27,38,.92); color:#fff; font-size:20px; line-height:1.5; padding:10px 22px; border-radius:10px; max-width: 86vw; text-align:center; opacity:0; transition:opacity .35s; letter-spacing:.02em; pointer-events:none; }
+.caption.on { opacity:1; }
+.cursor { position:fixed; z-index:80; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%; background:rgba(242,201,76,.9); box-shadow:0 0 0 3px rgba(242,201,76,.35); pointer-events:none; transition: transform .12s; left:-40px; top:-40px; }
+.cursor.press { transform: scale(.7); }
+.hl { animation: hl 1.6s ease 2; } @keyframes hl { 0%,100% { box-shadow:none; } 50% { box-shadow:0 0 0 4px rgba(242,201,76,.8); } }
+</style>
+<script src="/shinten.browser.js"></script>
+</head>
+<body>
+<div class="badge"><b>shinten</b><span>デモ</span></div>
+
+<!-- shop -->
+<section class="view" id="v-shop">
+  <div class="shop-top"><div class="wrap"><div class="logo-mark">は</div><div class="shop-name">はるかぜ雑貨店<small>HARUKAZE ZAKKA ONLINE STORE</small></div></div></div>
+  <div class="shop-nav"><div class="wrap"><span>新着</span><span>うつわ</span><span>布もの</span><span>キッチン</span><span>ご注文</span></div></div>
+  <div class="wrap">
+    <div class="crumb">ホーム ＞ ご注文</div>
+    <div class="card">
+      <h1>ご注文手続き</h1>
+      <p class="lead">お届け先をご入力ください。 <span class="lock">🔒 お名前・ご住所・お電話番号は、送信前にこのブラウザで暗号化されます</span></p>
+      <div class="product"><div class="ph"></div><div><b id="p-name">手びねりの豆皿 3枚セット</b><div class="note">3,300円（税込）</div></div></div>
+      <form id="order" class="grid2" autocomplete="off">
+        <label for="f-name">お名前<span class="req">必須</span></label><input id="f-name" name="name">
+        <label for="f-postal">郵便番号<span class="req">必須</span></label><input id="f-postal" name="postalCode">
+        <label for="f-address">ご住所<span class="req">必須</span></label><input id="f-address" name="address">
+        <label for="f-phone">お電話番号</label><input id="f-phone" name="phone">
+        <span></span><div><button class="btn" id="submit" type="submit">注文を確定する</button></div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="view" id="v-thanks">
+  <div class="shop-top"><div class="wrap"><div class="logo-mark">は</div><div class="shop-name">はるかぜ雑貨店<small>HARUKAZE ZAKKA ONLINE STORE</small></div></div></div>
+  <div class="shop-nav"><div class="wrap"><span>新着</span><span>うつわ</span><span>布もの</span><span>キッチン</span><span>ご注文</span></div></div>
+  <div class="wrap"><div class="crumb">ホーム ＞ ご注文 ＞ 完了</div>
+    <div class="card"><h1>ご注文ありがとうございました</h1><p>注文番号 <b id="t-id" style="font-size:22px"></b></p>
+      <p class="lock">🔒 お名前・ご住所・お電話番号は、このブラウザで暗号化してから送りました。お店のサーバーには暗号文だけが届いています。</p></div></div>
+</section>
+
+<!-- admin -->
+<section class="view" id="v-admin">
+  <div class="admin-top"><div class="wrap">ショップ管理画面 <small>はるかぜ雑貨店 ／ Webサーバー・データベース（公開領域）</small></div></div>
+  <div class="wrap">
+    <div class="card"><h2>受注一覧</h2><p class="lead">サーバーに届くのは、送料計算のための郵便番号と、お届け先の暗号文だけです。</p>
+      <table><thead><tr><th style="width:90px">注文番号</th><th style="width:110px">郵便番号</th><th style="width:150px">商品</th><th>お届け先（氏名・住所・電話）</th></tr></thead><tbody id="a-rows"></tbody></table></div>
+  </div>
+</section>
+
+<section class="view" id="v-dump">
+  <div class="admin-top" style="background:#5a1d1d"><div class="wrap">⚠ データベースが外部に持ち出された場合 <small>漏洩を想定した表示</small></div></div>
+  <div class="wrap"><div class="card"><h2>持ち出された orders テーブル</h2><p class="lead">出てくるのは郵便番号と暗号文です。復号する鍵はサーバーにありません。</p><pre class="dump" id="d-dump"></pre></div></div>
+</section>
+
+<!-- desk -->
+<section class="view" id="v-desk">
+  <div class="desk-top"><div class="wrap">出荷担当の端末 <small>shinten-ship ／ 秘密鍵はこの端末の中だけ</small></div></div>
+  <div class="wrap">
+    <div class="card"><h2>承認した公開鍵</h2><p class="lead">この鍵で暗号化された注文だけを復号します。</p><div class="keys" id="k-approved"></div>
+      <p class="note" style="margin:10px 0 0">サイトが配っている公開鍵：</p><div class="keys" id="k-served"></div></div>
+    <div class="card"><h2>送り状の作成</h2>
+      <p class="lead">未出荷の注文を復号し、ヤマト運輸 B2クラウドの取込ファイルを作ります。</p>
+      <button class="btn teal" id="mk">送り状を作る</button>
+      <div id="desk-out"></div></div>
+  </div>
+</section>
+
+<!-- trail -->
+<section class="view" id="v-trail">
+  <div class="trail-top"><div class="wrap">運用証跡 <small>deedlog ／ 取り扱いの記録（個人情報は含みません）</small></div></div>
+  <div class="wrap">
+    <div class="card"><h2>取り扱いの記録</h2><ul class="tl" id="tl"></ul></div>
+    <div class="card"><h2>第三者による確認</h2><p class="lead">記録全体に運営者が署名し、独立した第三者が副署します。あとから書き換えれば、署名と副署が合わなくなります。</p>
+      <button class="btn blue" id="vf">記録を検証する</button><div id="vf-out"></div></div>
+  </div>
+</section>
+
+<div class="caption" id="cap"></div>
+<div class="cursor" id="cur"></div>
+<div class="bar">
+  <span class="tag">デモ操作</span><span>架空の店舗です</span>
+  <button data-go="shop">お客さまの画面</button><button data-go="admin">管理画面</button><button data-go="dump">漏洩を想定</button><button data-go="desk">出荷担当の端末</button><button data-go="trail">運用証跡</button>
+  <button class="hot" id="hijack">サイトが乗っ取られる（公開鍵の差し替え）</button><button id="reset">最初から</button>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const api = async (p, b) => (await fetch(p, b === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) })).json();
+const short = (t) => t.slice(0, 10) + '…' + t.slice(-6);
+const names = {};
+async function keyLabels() {
+  const k = await api('/api/keys');
+  names[k.approved[0]] = '出荷担当'; names[k.approved[1]] = '控えの鍵';
+  $('#k-approved').innerHTML = k.approved.map((t) => `<span class="key">🔑 ${names[t]} ${short(t)}</span>`).join('');
+  $('#k-served').innerHTML = k.served.map((t) => `<span class="key ${names[t] ? '' : 'bad'}">${names[t] ? '🔑 ' + names[t] : '⚠ 見知らぬ鍵'} ${short(t)}</span>`).join('');
+}
+const views = {
+  async shop() { $('#order').reset(); $('#submit').disabled = false; },
+  async thanks() {},
+  async admin() {
+    const { orders } = await api('/api/orders');
+    $('#a-rows').innerHTML = orders.map((o) => `<tr><td>${o.id}</td><td>${esc(o.postalCode)}</td><td>${esc(o.item)}</td><td><span class="lock">🔒 暗号文</span><div class="cipher">${esc(o.cipher.slice(0, 150))}…</div></td></tr>`).join('') || '<tr><td colspan="4" class="note">まだ注文はありません</td></tr>';
+  },
+  async dump() { const d = await api('/api/dump'); $('#d-dump').textContent = JSON.stringify(d.rows, null, 2); },
+  async desk() { $('#desk-out').innerHTML = ''; await keyLabels(); },
+  async trail() {
+    $('#vf-out').innerHTML = '';
+    const { events } = await api('/api/trail');
+    const label = { received: ['受付', '注文を暗号文のまま受け付けて保管', 'ok'], decrypted: ['復号', '出荷担当の端末で復号し、送り状の取込ファイルを作成', 'ok'], purged: ['削除', '送り状の印刷後、取込ファイルを削除', 'ok'], stopped: ['停止', '承認していない鍵で暗号化された注文を検知し、処理を停止', 'ng'] };
+    $('#tl').innerHTML = events.map((e) => { const [t, d, c] = label[e.event]; const who = e.event === 'purged' ? `取込ファイル（${e.orders}件分）` : e.order ? `注文 ${e.order}` : e.orders ? `注文 ${e.orders}` : ''; return `<li><span class="dot ${c}">${c === 'ok' ? '✓' : '!'}</span><div><span class="t">${t}</span> <span class="note">${who}　${new Date(e.at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span><div class="d">${d}</div><div class="mono">記録 #${e.seq}　sha256:${e.digest.slice(0, 24)}…</div></div></li>`; }).join('');
+  },
+};
+async function go(name) {
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + name));
+  window.scrollTo(0, 0);
+  await views[name]?.();
+}
+document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+$('#reset').addEventListener('click', async () => { await api('/api/reset', {}); $('#desk-out').innerHTML = ''; $('#vf-out').innerHTML = ''; go('shop'); });
+$('#hijack').addEventListener('click', async () => { await api('/api/hijack', {}); window.capOnce?.(); });
+$('#order').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  $('#submit').disabled = true;
+  const f = new FormData($('#order'));
+  const values = { name: f.get('name'), postalCode: f.get('postalCode'), address: f.get('address'), phone: f.get('phone') };
+  const { keys } = await api('/.well-known/shinten.json');
+  const sealed = await shinten.seal('shipping', values, keys);   // in this browser, before anything is sent
+  const r = await api('/api/orders', { postalCode: sealed.clear.postalCode, envelope: sealed.envelope, item: $('#p-name').textContent, count: 1 });
+  $('#t-id').textContent = r.id;
+  go('thanks');
+});
+$('#mk').addEventListener('click', async () => {
+  const r = await api('/api/labels', {});
+  if (r.alarm) {
+    $('#desk-out').innerHTML = `<div class="alert ng"><b>STOP　送り状は1枚も作っていません</b>注文 ${r.orders.join('、')} が、承認していない鍵でも暗号化されています。サイトの公開鍵が差し替えられた可能性があります。サイトを確認するまで復号しません。</div>`;
+    await keyLabels();
+    return;
+  }
+  if (!r.rows) { $('#desk-out').innerHTML = '<p class="note">未出荷の注文はありません。</p>'; return; }
+  $('#desk-out').innerHTML = `<table style="margin-top:14px"><thead><tr><th>注文番号</th><th>お届け先</th><th>住所</th><th>電話</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td>${x.id}</td><td>${esc(x.name)}</td><td>〒${esc(x.postal)} ${esc(x.address)}</td><td>${esc(x.phone)}</td></tr>`).join('')}</tbody></table>
+  <div class="alert info"><b>取込ファイル ${r.file} を作成しました</b>${r.rows.length}件、CP932、${r.bytes.toLocaleString()} バイト。この端末の中にだけあります。</div>
+  <button class="btn gray" id="purge">印刷済み：取込ファイルを削除する</button>`;
+  $('#purge').addEventListener('click', async () => {
+    await api('/api/purge', {});
+    $('#desk-out').innerHTML = '<div class="alert ok"><b>取込ファイルを削除しました</b>お届け先は、また暗号文の中だけになりました。</div>';
+  });
+});
+$('#vf').addEventListener('click', async () => {
+  $('#vf-out').innerHTML = '<p class="note">検証しています…</p>';
+  const r = await api('/api/verify', {});
+  $('#vf-out').innerHTML = r.ok ? `<div class="alert ok"><b>記録は改ざんされていません</b>記録 ${r.count} 件　運営者の署名 ✓　第三者の副署 ✓ ${r.witnesses.join('、')}</div>` : `<div class="alert ng"><b>検証できませんでした</b>${esc(r.error ?? '')}</div>`;
+});
+// Keeps a result clear of the caption and the control bar.
+window.lift = (sel) => { const el = document.querySelector(sel); if (!el) return; const r = el.getBoundingClientRect(); const room = window.innerHeight - 190; if (r.bottom > room) window.scrollBy({ top: r.bottom - room, behavior: 'smooth' }); };
+document.body.style.paddingBottom = '260px';
+// captions and cursor, driven by the recorder
+window.caption = (t) => { const c = $('#cap'); if (!t) { c.classList.remove('on'); return; } c.innerHTML = t; c.classList.add('on'); };
+const cur = $('#cur');
+addEventListener('mousemove', (e) => { cur.style.left = e.clientX + 'px'; cur.style.top = e.clientY + 'px'; });
+addEventListener('mousedown', () => cur.classList.add('press')); addEventListener('mouseup', () => cur.classList.remove('press'));
+go(location.hash.slice(1) || 'shop');
+</script>
+</body>
+</html>

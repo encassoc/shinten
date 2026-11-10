@@ -1,0 +1,14 @@
+{
+  "name": "shinten-example-web-shop",
+  "private": true,
+  "description": "A fictional shop whose order form encrypts in the browser, with the shipping desk and a witnessed trail.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "shinten": "^0.2.2",
+    "shinten-ship": "^0.2.1"
+  }
+}
