@@ -1,6 +1,6 @@
 import { GeneralEncrypt, generalDecrypt, importJWK, type GeneralJWE, type JWK } from 'jose';
 import { ALG, ENC, toPublic } from './keys.js';
-import { profile, split, type Profile } from './profile.js';
+import { profile, profiles, split, type Profile } from './profile.js';
 
 /** The `typ` of an envelope and the version of its contents. */
 export const TYP = 'shinten';
@@ -90,14 +90,37 @@ export async function open(sealed: Sealed, privateJwk: JWK): Promise<Opened> {
   const kids = recipientsOf(sealed.envelope);
   if (!kids.includes(privateJwk.kid)) throw new Error(`this envelope is not sealed to ${privateJwk.kid}; recipients: ${kids.join(', ')}`);
   const { plaintext, protectedHeader, additionalAuthenticatedData } = await generalDecrypt(sealed.envelope, await importJWK(privateJwk, ALG));
-  const meta = (protectedHeader as { typ?: string; shinten?: { v: number; profile: string } }) ?? {};
+  const meta = (protectedHeader as { typ?: string; shinten?: { v: number; profile: string; clear?: string[] } }) ?? {};
   if (meta.typ !== TYP || !meta.shinten) throw new Error('not a shinten envelope');
   if (meta.shinten.v !== VERSION) throw new Error(`envelope version ${meta.shinten.v} is not supported`);
   if (!sameBytes(additionalAuthenticatedData, bindClear(sealed.clear))) {
     throw new Error('the clear fields presented are not the ones this envelope was sealed beside');
   }
-  const fields = JSON.parse(dec.decode(plaintext)) as { [field: string]: string };
+  const declared = [...(meta.shinten.clear ?? [])].sort().join('\n');
+  if (declared !== Object.keys(sealed.clear).sort().join('\n')) throw new Error('the clear fields presented are not the ones the envelope declares');
+  const fields = sealedFields(dec.decode(plaintext));
+  // A field is either clear or sealed, never both: otherwise the sealed value
+  // would silently replace the clear one the site acted on (a postal code
+  // charged for one zone, a label printed for another). An envelope can be
+  // built by hand with the public key, so this is checked here, not trusted
+  // to seal().
+  const known = profiles[meta.shinten.profile];
+  for (const k of Object.keys(fields)) {
+    if (Object.hasOwn(sealed.clear, k)) throw new Error(`field ${k} is both in the clear and sealed; refusing to open`);
+    if (known?.clear.includes(k)) throw new Error(`field ${k} is clear in the ${known.name} profile but was sealed; refusing to open`);
+  }
   return { profile: meta.shinten.profile, fields: { ...sealed.clear, ...fields }, kid: privateJwk.kid };
+}
+
+/** The sealed fields: a JSON object of strings, and nothing else. */
+function sealedFields(json: string): { [field: string]: string } {
+  const v = JSON.parse(json) as unknown;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('the sealed contents are not an object of fields');
+  for (const [k, x] of Object.entries(v)) {
+    if (typeof x !== 'string') throw new Error(`sealed field ${k} is not a string`);
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') throw new Error(`sealed field name ${k} is not allowed`);
+  }
+  return v as { [field: string]: string };
 }
 
 /** The profile definition, re-exported for callers that only import this module. */
