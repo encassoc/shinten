@@ -125,6 +125,12 @@ encryption of form fields at the edge, ciphertext through every tier,
 decryption only where the private key is. Shinten packages it for
 ordinary sites, with the opening side and key custody included.
 
+## Related
+
+[kangoh](https://kangoh.com/en/) runs shared reward points among small
+shops with no sign-up and no customer database: a sister project built on
+the same idea of holding nothing.
+
 ## Development
 
 ```sh
