@@ -4,7 +4,7 @@
 shinten が注文フォームをブラウザで暗号化します。
 [shinten-ship](https://github.com/eucassoc/shinten-ship) が出荷担当の端末で復号して、
 配送会社の取込ファイルを作ります。
-[deedlog](https://github.com/deedlog/deedlog) が各手順を記録し、二つの連署サーバーが連署します。
+[deedlog](https://github.com/eucassoc/deedlog) が各手順を記録し、二つの連署サーバーが連署します。
 
 流れは [demo.mp4](demo.mp4)（約2分）で見られます。
 
@@ -13,7 +13,7 @@ shinten が注文フォームをブラウザで暗号化します。
 Node 20 以上と、`dlog` をビルドするための Go が必要です。
 
 ```sh
-git clone https://github.com/deedlog/deedlog && (cd deedlog && go install ./cmd/dlog)
+git clone https://github.com/eucassoc/deedlog && (cd deedlog && go install ./cmd/dlog)
 
 cd examples/web-shop
 npm install

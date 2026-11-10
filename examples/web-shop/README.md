@@ -3,7 +3,7 @@
 A fictional shop, in Japanese, built on the published packages: shinten
 encrypts the order form in the browser, [shinten-ship](https://github.com/eucassoc/shinten-ship)
 decrypts on the shipping desk and writes the carrier's label file, and
-[deedlog](https://github.com/deedlog/deedlog) records each step in a chain
+[deedlog](https://github.com/eucassoc/deedlog) records each step in a chain
 that two witnesses cosign.
 
 [demo.mp4](demo.mp4) (2 minutes) walks through it.
@@ -13,7 +13,7 @@ that two witnesses cosign.
 Node 20 or later, and Go to build `dlog`:
 
 ```sh
-git clone https://github.com/deedlog/deedlog && (cd deedlog && go install ./cmd/dlog)
+git clone https://github.com/eucassoc/deedlog && (cd deedlog && go install ./cmd/dlog)
 
 cd examples/web-shop
 npm install
