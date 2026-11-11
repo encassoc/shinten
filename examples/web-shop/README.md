@@ -10,10 +10,10 @@ that two witnesses cosign.
 
 ## Run it
 
-Node 20 or later, and Go to build `dlog`:
+Node 20 or later, and Go to install `dlog`:
 
 ```sh
-git clone https://github.com/eucassoc/deedlog && (cd deedlog && go install ./cmd/dlog)
+go install github.com/eucassoc/deedlog/cmd/dlog@latest
 
 cd examples/web-shop
 npm install

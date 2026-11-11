@@ -10,10 +10,10 @@ shinten が注文フォームをブラウザで暗号化します。
 
 ## 動かし方
 
-Node 20 以上と、`dlog` をビルドするための Go が必要です。
+Node 20 以上と、`dlog` を入れるための Go が必要です。
 
 ```sh
-git clone https://github.com/eucassoc/deedlog && (cd deedlog && go install ./cmd/dlog)
+go install github.com/eucassoc/deedlog/cmd/dlog@latest
 
 cd examples/web-shop
 npm install
